@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Background -->
+    <color name="bg_dark">#0D1117</color>
+    <color name="bg_card">#161B22</color>
+    <color name="bg_surface">#21262D</color>
+
+    <!-- Text -->
+    <color name="text_primary">#E6EDF3</color>
+    <color name="text_secondary">#8B949E</color>
+    <color name="text_hint">#484F58</color>
+
+    <!-- Status Colors -->
+    <color name="color_connected">#3FB950</color>
+    <color name="color_connecting">#F0A500</color>
+    <color name="color_disconnected">#F85149</color>
+
+    <!-- Accent -->
+    <color name="color_accent_green">#3FB950</color>
+    <color name="color_accent_purple">#A371F7</color>
+    <color name="color_accent_blue">#58A6FF</color>
+
+    <!-- System -->
+    <color name="colorPrimary">#161B22</color>
+    <color name="colorPrimaryVariant">#0D1117</color>
+    <color name="colorOnPrimary">#E6EDF3</color>
+    <color name="colorSecondary">#3FB950</color>
+    <color name="colorOnSecondary">#0D1117</color>
+    <color name="colorSurface">#161B22</color>
+    <color name="colorOnSurface">#E6EDF3</color>
+    <color name="colorBackground">#0D1117</color>
+    <color name="colorOnBackground">#E6EDF3</color>
+</resources>

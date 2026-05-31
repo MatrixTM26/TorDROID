@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TorDROID</string>
+    <string name="btn_connect">Hubungkan Tor</string>
+    <string name="btn_disconnect">Putuskan</string>
+    <string name="btn_new_identity">Identitas Baru</string>
+    <string name="status_connected">Terlindungi</string>
+    <string name="status_disconnected">Tidak Terlindungi</string>
+    <string name="status_connecting">Menghubungkan...</string>
+    <string name="status_error">Error</string>
+    <string name="notif_channel_desc">Status koneksi TorDROID VPN</string>
+    <string name="vpn_session_name">TorDROID VPN</string>
+</resources>
