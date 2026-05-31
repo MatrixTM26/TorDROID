@@ -1,4 +1,6 @@
-# TorDROID 🧅
+![TorDROID](images/logo.png)
+
+# TorDROID
 
 An Android VPN application that routes all device traffic through the **Tor anonymity network**.
 Written entirely in Java. Designed to be compiled directly on Android via **Termux** without a PC.
@@ -412,7 +414,7 @@ using the `TorControlClient` class. This enables features like New Identity
 
 ## License
 
-This project is released under the AGPL V3.0 License.
+This project is released under the AGPL-V3 License.
 
 TorDROID uses the Tor network developed by [The Tor Project](https://www.torproject.org).
 Tor is free software under the BSD license.
