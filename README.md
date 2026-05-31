@@ -412,7 +412,7 @@ using the `TorControlClient` class. This enables features like New Identity
 
 ## License
 
-This project is released under the MIT License.
+This project is released under the AGPL V3.0 License.
 
 TorDROID uses the Tor network developed by [The Tor Project](https://www.torproject.org).
 Tor is free software under the BSD license.
