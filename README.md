@@ -7,24 +7,7 @@ Written entirely in Java. Designed to be compiled directly on Android via **Term
 
 ## How It Works
 
-```
-┌─────────────────────────────────────────────────────┐
-│                  Android Device                     │
-│                                                     │
-│   Any App  ──►  VPN Interface (tun0)                │
-│                      │                              │
-│               TorVpnService                         │
-│               (tun2socks bridge)                    │
-│                      │                              │
-│               TorProxyService                       │
-│               (Tor daemon, SOCKS5 :9050)            │
-└──────────────────────┼──────────────────────────────┘
-                       │
-              [ Tor Network ]
-              Guard ► Middle ► Exit
-                       │
-                  Public Internet
-```
+![ARCH](images/arch.png)
 
 All traffic from every app on the device is captured by the VPN interface and forwarded
 through the local Tor SOCKS5 proxy. The Tor daemon builds an encrypted three-hop circuit
@@ -96,12 +79,15 @@ TorDROID/
 ## Source File Reference
 
 ### `TorConfig.java`
+
 Central configuration. All port numbers, VPN address settings, Intent action strings,
 and broadcast extra keys are defined here as PascalCase constants. The `BuildTorrcConfig()`
 method generates the torrc file content written to disk before Tor starts.
 
 ### `TorProxyService.java`
+
 Foreground service that manages the entire Tor daemon lifecycle:
+
 1. Selects the correct Tor binary for the device ABI and copies it from assets
 2. Writes the torrc configuration file
 3. Spawns the Tor process via `ProcessBuilder`
@@ -111,34 +97,41 @@ Foreground service that manages the entire Tor daemon lifecycle:
 7. Fetches the exit IP through the Tor SOCKS5 proxy via `api.ipify.org`
 
 ### `TorVpnService.java`
+
 Android `VpnService` subclass that:
+
 1. Builds a tun VPN interface with `VpnService.Builder`
 2. Excludes the TorDROID package itself so it can reach the Tor daemon directly
 3. Launches `tun2socks` binary to transparently bridge the tun device to Tor SOCKS5
 4. Keeps the process running until a stop action is received
 
 ### `TorControlClient.java`
+
 Minimal Tor Control Protocol v1 client over raw TCP.
 Supports: `AUTHENTICATE`, `SIGNAL NEWNYM`, `SIGNAL CLEARDNSCACHE`,
 `GETINFO address`, `GETINFO circuit-status`, `GETINFO status/bootstrap-phase`.
 
 ### `TorStatus.java`
+
 State model holding the current `State` enum value, bootstrap percent and message,
 exit IP, connection timestamp, and error message. `GetUptime()` computes `HH:MM:SS`
 from the stored `ConnectedAt` timestamp.
 
 ### `TorUtils.java`
+
 Static helpers for: copying assets to executable paths, writing text files,
 checking if a TCP port is open, parsing Tor log lines with regex, formatting
 byte counts, and checking network availability.
 
 ### `MainActivity.java`
+
 Single-activity UI. Registers a `BroadcastReceiver` for `TorConfig.ActionStatus`
 intents and calls `UpdateUi()` on every state change. Manages the VPN permission
 request flow (`VpnService.prepare()`), uptime timer, clipboard copy, and
 shield/dot animations.
 
 ### `BootReceiver.java`
+
 `BroadcastReceiver` for `ACTION_BOOT_COMPLETED`. Reads the `autostart` preference
 and starts `TorProxyService` if enabled.
 
@@ -147,7 +140,7 @@ and starts `TorProxyService` if enabled.
 ## Ports Used
 
 | Port | Protocol | Purpose                          |
-|------|----------|----------------------------------|
+| ---- | -------- | -------------------------------- |
 | 9050 | SOCKS5   | Main Tor proxy (used by the VPN) |
 | 9051 | TCP      | Tor Control Port                 |
 | 8118 | HTTP     | HTTP tunnel proxy                |
@@ -160,12 +153,12 @@ and starts `TorProxyService` if enabled.
 
 ### Requirements
 
-| Tool | Version |
-|------|---------|
-| Java | 17 or 21 |
-| Gradle | 7.6.x or system gradle |
+| Tool        | Version                         |
+| ----------- | ------------------------------- |
+| Java        | 17 or 21                        |
+| Gradle      | 7.6.x or system gradle          |
 | Android SDK | platform 33, build-tools 34.0.0 |
-| Termux | Any recent version |
+| Termux      | Any recent version              |
 
 ### Step 1 — Install packages
 
@@ -279,12 +272,12 @@ export ANDROID_NDK_HOME=/path/to/ndk
 ### Required files in `app/src/main/assets/`
 
 | Filename      | ABI            | Devices                        |
-|---------------|----------------|-------------------------------|
-| `tor-arm64`   | arm64-v8a      | Most modern Android phones    |
-| `tor-armeabi` | armeabi-v7a    | Older 32-bit ARM phones       |
-| `tor-x86`     | x86            | x86 emulators                 |
-| `tor-x86_64`  | x86_64         | x86_64 emulators              |
-| `tun2socks`   | matches device | VPN bridge (all architectures)|
+| ------------- | -------------- | ------------------------------ |
+| `tor-arm64`   | arm64-v8a      | Most modern Android phones     |
+| `tor-armeabi` | armeabi-v7a    | Older 32-bit ARM phones        |
+| `tor-x86`     | x86            | x86 emulators                  |
+| `tor-x86_64`  | x86_64         | x86_64 emulators               |
+| `tun2socks`   | matches device | VPN bridge (all architectures) |
 
 ---
 
@@ -304,62 +297,78 @@ chmod +x app/src/main/assets/tun2socks
 
 ## Permissions
 
-| Permission | Reason |
-|---|---|
-| `INTERNET` | Connect to the Tor network |
-| `BIND_VPN_SERVICE` | Create the VPN tunnel interface |
-| `FOREGROUND_SERVICE` | Keep the Tor daemon running in background |
-| `RECEIVE_BOOT_COMPLETED` | Auto-start when device boots |
-| `ACCESS_NETWORK_STATE` | Check connectivity before connecting |
-| `CHANGE_NETWORK_STATE` | Required by VPN subsystem |
-| `VIBRATE` | Optional notification vibration |
+| Permission               | Reason                                    |
+| ------------------------ | ----------------------------------------- |
+| `INTERNET`               | Connect to the Tor network                |
+| `BIND_VPN_SERVICE`       | Create the VPN tunnel interface           |
+| `FOREGROUND_SERVICE`     | Keep the Tor daemon running in background |
+| `RECEIVE_BOOT_COMPLETED` | Auto-start when device boots              |
+| `ACCESS_NETWORK_STATE`   | Check connectivity before connecting      |
+| `CHANGE_NETWORK_STATE`   | Required by VPN subsystem                 |
+| `VIBRATE`                | Optional notification vibration           |
 
 ---
 
 ## Troubleshooting
 
 ### `AAPT2 is not supported on 32-bit Linux`
+
 Your device runs a 32-bit kernel. Add this to `gradle.properties`:
+
 ```
 android.enableAapt2=false
 ```
+
 And use AGP 7.4.2 in `build.gradle` (already configured).
 
 ### `Could not reserve enough space for object heap`
+
 Gradle is requesting too much memory. Set in `gradle.properties`:
+
 ```
 org.gradle.jvmargs=-Xmx512m -Xms128m
 ```
 
 ### `SDK location not found`
+
 Create `local.properties` in the project root:
+
 ```bash
 echo "sdk.dir=$HOME/android-sdk" > local.properties
 ```
 
 ### `GradleWrapperMain ClassNotFoundException`
+
 The `gradle-wrapper.jar` is missing. Either download it:
+
 ```bash
 mkdir -p gradle/wrapper
 wget -O gradle/wrapper/gradle-wrapper.jar \
   https://github.com/gradle/gradle/raw/v7.6.4/gradle/wrapper/gradle-wrapper.jar
 ```
+
 Or skip the wrapper and use system gradle directly:
+
 ```bash
 gradle assembleDebug --no-daemon
 ```
 
 ### Bootstrap stuck at 0%
+
 - Check your internet connection
 - If on a network that blocks Tor, enable bridges in `TorConfig.java`:
+
 ```java
 + "UseBridges 1\n"
 + "Bridge obfs4 <bridge_address>\n"
 ```
+
 Get bridges at: https://bridges.torproject.org
 
 ### Tor process exits immediately
+
 Check that the binary in `assets/` matches your device ABI:
+
 ```bash
 file app/src/main/assets/tor-arm64
 # Should output: ELF 64-bit LSB executable, ARM aarch64
@@ -370,16 +379,19 @@ file app/src/main/assets/tor-arm64
 ## Architecture Notes
 
 ### Why a separate Tor binary instead of a Java library?
+
 The official Tor daemon is written in C. Running it as a subprocess is the same
 approach used by Orbot, the official Tor app for Android. It is more stable and
 receives security updates directly from The Tor Project.
 
 ### Why tun2socks?
+
 Android's `VpnService` gives you a raw tun file descriptor. To forward packets
 from that interface to a SOCKS5 proxy without root, you need a userspace TCP/IP
 stack. `tun2socks` implements this stack and handles all protocol translation.
 
 ### Control Port
+
 After bootstrap, TorDROID connects to the Tor Control port on `127.0.0.1:9051`
 using the `TorControlClient` class. This enables features like New Identity
 (`SIGNAL NEWNYM`) and real-time status queries without restarting the daemon.
