@@ -26,390 +26,318 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * TorProxyService - Service utama yang mengelola proses Tor daemon
- *
- * Alur kerja:
- * 1. Salin binary Tor dari assets ke direktori data
- * 2. Tulis konfigurasi torrc
- * 3. Jalankan proses Tor
- * 4. Monitor log output untuk progress bootstrap
- * 5. Kirim broadcast status ke UI
- */
+// Manages the Tor daemon process lifecycle and monitors its log output
 public class TorProxyService extends Service {
 
-    private static final String TAG = "TorProxyService";
+    private static final String Tag = "TorProxyService";
 
-    private final IBinder mBinder = new LocalBinder();
-    private ExecutorService mExecutor;
-    private Process mTorProcess;
-    private AtomicBoolean mRunning = new AtomicBoolean(false);
-    private TorStatus mStatus = new TorStatus();
-    private TorControlClient mControl;
+    private final IBinder LocalBinder = new ServiceBinder();
+    private ExecutorService Executor;
+    private Process TorProcess;
+    private AtomicBoolean Running = new AtomicBoolean(false);
+    private TorStatus Status = new TorStatus();
+    private TorControlClient ControlClient;
 
-    // ── Binder ────────────────────────────────────────────────────────────────
+    public class ServiceBinder extends Binder {
 
-    public class LocalBinder extends Binder {
-
-        public TorProxyService getService() {
+        public TorProxyService GetService() {
             return TorProxyService.this;
         }
     }
 
     @Override
-    public IBinder onBind(Intent intent) {
-        return mBinder;
+    public IBinder onBind(Intent IntentParam) {
+        return LocalBinder;
     }
-
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     @Override
     public void onCreate() {
         super.onCreate();
-        mExecutor = Executors.newCachedThreadPool();
-        createNotificationChannel();
+        Executor = Executors.newCachedThreadPool();
+        CreateNotificationChannel();
     }
 
     @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null) return START_NOT_STICKY;
+    public int onStartCommand(Intent IntentParam, int Flags, int StartId) {
+        if (IntentParam == null) return START_NOT_STICKY;
 
-        String action = intent.getAction();
-        if (action == null) return START_NOT_STICKY;
+        String Action = IntentParam.getAction();
+        if (Action == null) return START_NOT_STICKY;
 
-        switch (action) {
-            case TorConfig.ACTION_START:
-                startTor();
-                break;
-            case TorConfig.ACTION_STOP:
-                stopTor();
-                break;
-            case TorConfig.ACTION_NEWID:
-                requestNewIdentity();
-                break;
-        }
+        if (Action.equals(TorConfig.ActionStart)) StartTor();
+        else if (Action.equals(TorConfig.ActionStop)) StopTor();
+        else if (Action.equals(TorConfig.ActionNewIdentity)) RequestNewIdentity();
+
         return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        stopTor();
-        if (mExecutor != null) mExecutor.shutdownNow();
+        StopTor();
+        if (Executor != null) Executor.shutdownNow();
     }
 
-    // ── Tor Control ───────────────────────────────────────────────────────────
-
-    /**
-     * Mulai Tor daemon
-     */
-    public void startTor() {
-        if (mRunning.get()) {
-            Log.d(TAG, "Tor sudah berjalan");
+    // Starts the Tor daemon process
+    public void StartTor() {
+        if (Running.get()) {
+            Log.d(Tag, "Tor is already running");
             return;
         }
 
-        mStatus.setState(TorStatus.State.STARTING);
-        broadcastStatus("Mempersiapkan Tor...", 0);
-        startForeground(TorConfig.NOTIF_ID, buildNotification("Memulai Tor...", 0));
+        Status.SetState(TorStatus.State.Starting);
+        BroadcastStatus("Preparing Tor...", 0);
+        startForeground(TorConfig.NotificationId, BuildNotification("Starting Tor...", 0));
 
-        mExecutor.execute(() -> {
+        Executor.execute(() -> {
             try {
-                // 1. Siapkan binary dan konfigurasi
-                if (!prepareTorBinary()) {
-                    handleError("Gagal menyiapkan binary Tor");
+                if (!PrepareTorBinary()) {
+                    HandleError("Failed to prepare Tor binary");
                     return;
                 }
 
-                // 2. Tulis torrc
-                String dataDir = getFilesDir().getAbsolutePath() + "/tor_data";
-                String torrcPath = getFilesDir().getAbsolutePath() + "/torrc";
-                new File(dataDir).mkdirs();
+                String DataDir = getFilesDir().getAbsolutePath() + "/tor_data";
+                String TorrcPath = getFilesDir().getAbsolutePath() + "/torrc";
+                new File(DataDir).mkdirs();
 
-                String torrcContent = TorConfig.buildTorrcConfig(dataDir);
-                TorUtils.writeTextFile(torrcPath, torrcContent);
+                TorUtils.WriteTextFile(TorrcPath, TorConfig.BuildTorrcConfig(DataDir));
 
-                // 3. Jalankan Tor
-                String torBinary = getFilesDir().getAbsolutePath() + "/tor";
-                ProcessBuilder pb = new ProcessBuilder(torBinary, "-f", torrcPath);
-                pb.environment().put("HOME", getFilesDir().getAbsolutePath());
-                pb.redirectErrorStream(true);
+                String TorBinary = getFilesDir().getAbsolutePath() + "/tor";
+                ProcessBuilder Builder = new ProcessBuilder(TorBinary, "-f", TorrcPath);
+                Builder.environment().put("HOME", getFilesDir().getAbsolutePath());
+                Builder.redirectErrorStream(true);
 
-                mTorProcess = pb.start();
-                mRunning.set(true);
+                TorProcess = Builder.start();
+                Running.set(true);
 
-                Log.d(TAG, "Proses Tor dimulai");
-
-                // 4. Monitor log
-                monitorTorLog();
+                Log.d(Tag, "Tor process started");
+                MonitorTorLog();
             } catch (Exception e) {
-                Log.e(TAG, "Error menjalankan Tor", e);
-                handleError("Error: " + e.getMessage());
+                Log.e(Tag, "Error starting Tor", e);
+                HandleError("Error: " + e.getMessage());
             }
         });
     }
 
-    /**
-     * Hentikan Tor daemon
-     */
-    public void stopTor() {
-        mStatus.setState(TorStatus.State.STOPPING);
-        broadcastStatus("Menghentikan Tor...", 0);
+    // Stops the Tor daemon and cleans up
+    public void StopTor() {
+        Status.SetState(TorStatus.State.Stopping);
+        BroadcastStatus("Stopping Tor...", 0);
 
-        // Disconnect control
-        if (mControl != null) {
-            mControl.disconnect();
-            mControl = null;
+        if (ControlClient != null) {
+            ControlClient.Disconnect();
+            ControlClient = null;
         }
 
-        // Kill process
-        if (mTorProcess != null) {
-            mTorProcess.destroy();
-            mTorProcess = null;
+        if (TorProcess != null) {
+            TorProcess.destroy();
+            TorProcess = null;
         }
 
-        mRunning.set(false);
-        mStatus.setState(TorStatus.State.STOPPED);
-        broadcastStatus("Tor dihentikan", 0);
+        Running.set(false);
+        Status.SetState(TorStatus.State.Stopped);
+        BroadcastStatus("Tor stopped", 0);
         stopForeground(true);
         stopSelf();
     }
 
-    /**
-     * Minta identitas / IP baru
-     */
-    public void requestNewIdentity() {
-        mExecutor.execute(() -> {
-            if (mControl == null || !mControl.isConnected()) {
-                mControl = new TorControlClient();
-                if (!mControl.connect() || !mControl.authenticate()) {
-                    broadcastStatus("Gagal koneksi ke Tor Control", -1);
+    // Sends the NEWNYM signal to Tor to request a new identity
+    public void RequestNewIdentity() {
+        Executor.execute(() -> {
+            if (ControlClient == null || !ControlClient.IsConnected()) {
+                ControlClient = new TorControlClient();
+                if (!ControlClient.Connect() || !ControlClient.Authenticate()) {
+                    BroadcastStatus("Failed to connect to Tor Control", -1);
                     return;
                 }
             }
-            if (mControl.newIdentity()) {
-                broadcastStatus("Identitas baru berhasil diminta!", -1);
-                // Ambil IP baru setelah delay singkat
+            if (ControlClient.NewIdentity()) {
+                BroadcastStatus("New identity requested successfully", -1);
                 try {
                     Thread.sleep(3000);
-                } catch (InterruptedException ignored) {}
-                fetchAndBroadcastExitIP();
+                } catch (InterruptedException Ignored) {}
+                FetchAndBroadcastExitIp();
             } else {
-                broadcastStatus("Gagal meminta identitas baru", -1);
+                BroadcastStatus("Failed to request new identity", -1);
             }
         });
     }
 
-    // ── Private Helpers ───────────────────────────────────────────────────────
+    // Copies the correct Tor binary from assets based on device ABI
+    private boolean PrepareTorBinary() {
+        String DestPath = getFilesDir().getAbsolutePath() + "/tor";
+        File TorBin = new File(DestPath);
 
-    /**
-     * Salin binary Tor dari assets ke direktori yang bisa dieksekusi
-     */
-    private boolean prepareTorBinary() {
-        String destPath = getFilesDir().getAbsolutePath() + "/tor";
-        File torBin = new File(destPath);
-
-        // Cek apakah sudah ada
-        if (torBin.exists() && torBin.canExecute()) {
-            Log.d(TAG, "Binary Tor sudah ada");
+        if (TorBin.exists() && TorBin.canExecute()) {
+            Log.d(Tag, "Tor binary already exists");
             return true;
         }
 
-        // Tentukan ABI
-        String abi = Build.SUPPORTED_ABIS[0];
-        String assetName;
+        String Abi = Build.SUPPORTED_ABIS[0];
+        String AssetName;
 
-        if (abi.contains("arm64")) {
-            assetName = "tor-arm64";
-        } else if (abi.contains("armeabi")) {
-            assetName = "tor-armeabi";
-        } else if (abi.contains("x86_64")) {
-            assetName = "tor-x86_64";
-        } else if (abi.contains("x86")) {
-            assetName = "tor-x86";
-        } else {
-            assetName = "tor-arm64"; // default
-        }
+        if (Abi.contains("arm64")) AssetName = "tor-arm64";
+        else if (Abi.contains("armeabi")) AssetName = "tor-armeabi";
+        else if (Abi.contains("x86_64")) AssetName = "tor-x86_64";
+        else if (Abi.contains("x86")) AssetName = "tor-x86";
+        else AssetName = "tor-arm64";
 
-        Log.d(TAG, "Menyalin binary Tor: " + assetName + " -> " + destPath);
-        return TorUtils.copyAsset(this, assetName, destPath);
+        Log.d(Tag, "Copying Tor binary: " + AssetName);
+        return TorUtils.CopyAsset(this, AssetName, DestPath);
     }
 
-    /**
-     * Monitor output log Tor dan parse bootstrap progress
-     */
-    private void monitorTorLog() {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(mTorProcess.getInputStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null && mRunning.get()) {
-                Log.d(TAG, "[TOR] " + line);
+    // Reads Tor stdout log and parses bootstrap progress lines
+    private void MonitorTorLog() {
+        try (BufferedReader LogReader = new BufferedReader(new InputStreamReader(TorProcess.getInputStream()))) {
+            String Line;
+            while ((Line = LogReader.readLine()) != null && Running.get()) {
+                Log.d(Tag, "[TOR] " + Line);
 
-                // Parse bootstrap
-                int percent = TorUtils.parseBootstrapPercent(line);
-                if (percent >= 0) {
-                    String msg = TorUtils.parseBootstrapMessage(line);
-                    mStatus.setState(TorStatus.State.BOOTSTRAPPING);
-                    mStatus.setBootstrapPercent(percent);
-                    mStatus.setBootstrapMessage(msg);
-                    broadcastStatus(msg != null ? msg : "Bootstrap " + percent + "%", percent);
-                    updateNotification("Bootstrap " + percent + "%", percent);
+                int Percent = TorUtils.ParseBootstrapPercent(Line);
+                if (Percent >= 0) {
+                    String Message = TorUtils.ParseBootstrapMessage(Line);
+                    Status.SetState(TorStatus.State.Bootstrapping);
+                    Status.SetBootstrapPercent(Percent);
+                    Status.SetBootstrapMessage(Message);
+                    BroadcastStatus(Message != null ? Message : "Bootstrap " + Percent + "%", Percent);
+                    UpdateNotification("Bootstrap " + Percent + "%", Percent);
 
-                    // Bootstrap selesai
-                    if (percent == 100) {
-                        onTorReady();
-                    }
+                    if (Percent == 100) OnTorReady();
                 }
 
-                // Deteksi error
-                if (line.contains("[err]") || line.contains("[warn]")) {
-                    Log.w(TAG, "Tor warning/error: " + line);
+                if (Line.contains("[err]") || Line.contains("[warn]")) {
+                    Log.w(Tag, "Tor warning: " + Line);
                 }
             }
 
-            // Process selesai
-            if (mRunning.get()) {
-                handleError("Proses Tor berhenti tak terduga");
-            }
+            if (Running.get()) HandleError("Tor process stopped unexpectedly");
         } catch (IOException e) {
-            if (mRunning.get()) {
-                handleError("Error membaca log Tor: " + e.getMessage());
-            }
+            if (Running.get()) HandleError("Error reading Tor log: " + e.getMessage());
         }
     }
 
-    /**
-     * Dipanggil saat Tor selesai bootstrap (100%)
-     */
-    private void onTorReady() {
-        mStatus.setState(TorStatus.State.CONNECTED);
-        Log.d(TAG, "Tor berhasil terhubung!");
+    // Called when Tor finishes bootstrapping to 100%
+    private void OnTorReady() {
+        Status.SetState(TorStatus.State.Connected);
+        Log.d(Tag, "Tor connected successfully");
 
-        // Hubungkan ke control port
-        mExecutor.execute(() -> {
+        Executor.execute(() -> {
             try {
                 Thread.sleep(500);
-            } catch (InterruptedException ignored) {}
-            mControl = new TorControlClient();
-            if (mControl.connect() && mControl.authenticate()) {
-                Log.d(TAG, "Control port terhubung");
-                fetchAndBroadcastExitIP();
+            } catch (InterruptedException Ignored) {}
+            ControlClient = new TorControlClient();
+            if (ControlClient.Connect() && ControlClient.Authenticate()) {
+                Log.d(Tag, "Control port connected");
+                FetchAndBroadcastExitIp();
             }
         });
 
-        broadcastStatus("Terhubung ke jaringan Tor!", 100);
-        updateNotification("Terlindungi oleh Tor", 100);
+        BroadcastStatus("Connected to Tor network", 100);
+        UpdateNotification("Protected by Tor", 100);
     }
 
-    /**
-     * Ambil dan kirim info IP exit node
-     */
-    private void fetchAndBroadcastExitIP() {
-        mExecutor.execute(() -> {
+    // Fetches the current exit node IP through the Tor SOCKS proxy
+    private void FetchAndBroadcastExitIp() {
+        Executor.execute(() -> {
             try {
-                // Gunakan okhttp via SOCKS proxy untuk cek IP
-                java.net.Proxy proxy = new java.net.Proxy(
+                java.net.Proxy Proxy = new java.net.Proxy(
                     java.net.Proxy.Type.SOCKS,
-                    new java.net.InetSocketAddress(TorConfig.TOR_HOST, TorConfig.SOCKS_PORT)
+                    new java.net.InetSocketAddress(TorConfig.TorHost, TorConfig.SocksPort)
                 );
 
-                java.net.URL url = new java.net.URL("https://api.ipify.org");
-                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection(proxy);
-                conn.setConnectTimeout(10000);
-                conn.setReadTimeout(10000);
+                java.net.URL Url = new java.net.URL("https://api.ipify.org");
+                java.net.HttpURLConnection Connection = (java.net.HttpURLConnection) Url.openConnection(Proxy);
+                Connection.setConnectTimeout(10000);
+                Connection.setReadTimeout(10000);
 
-                BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                String ip = reader.readLine();
-                reader.close();
+                BufferedReader IpReader = new BufferedReader(new InputStreamReader(Connection.getInputStream()));
+                String Ip = IpReader.readLine();
+                IpReader.close();
 
-                if (ip != null && !ip.isEmpty()) {
-                    mStatus.setExitIp(ip.trim());
-                    Intent intent = new Intent(TorConfig.ACTION_STATUS);
-                    intent.putExtra(TorConfig.EXTRA_IP, ip.trim());
-                    sendBroadcast(intent);
-                    Log.d(TAG, "Exit IP: " + ip);
+                if (Ip != null && !Ip.isEmpty()) {
+                    Status.SetExitIp(Ip.trim());
+                    Intent IpIntent = new Intent(TorConfig.ActionStatus);
+                    IpIntent.putExtra(TorConfig.ExtraIp, Ip.trim());
+                    sendBroadcast(IpIntent);
+                    Log.d(Tag, "Exit IP: " + Ip);
                 }
             } catch (Exception e) {
-                Log.w(TAG, "Gagal mengambil exit IP: " + e.getMessage());
+                Log.w(Tag, "Failed to fetch exit IP: " + e.getMessage());
             }
         });
     }
 
-    /**
-     * Handle error
-     */
-    private void handleError(String message) {
-        Log.e(TAG, "Error: " + message);
-        mRunning.set(false);
-        mStatus.setState(TorStatus.State.ERROR);
-        mStatus.setErrorMessage(message);
-        broadcastStatus(message, -1);
-        updateNotification("Error: " + message, 0);
+    // Handles a fatal error by updating state and broadcasting the message
+    private void HandleError(String Message) {
+        Log.e(Tag, "Error: " + Message);
+        Running.set(false);
+        Status.SetState(TorStatus.State.Error);
+        Status.SetErrorMessage(Message);
+        BroadcastStatus(Message, -1);
+        UpdateNotification("Error: " + Message, 0);
     }
 
-    /**
-     * Kirim broadcast status ke UI
-     */
-    private void broadcastStatus(String message, int progress) {
-        Intent intent = new Intent(TorConfig.ACTION_STATUS);
-        intent.putExtra(TorConfig.EXTRA_STATUS, mStatus.getState().name());
-        intent.putExtra(TorConfig.EXTRA_MESSAGE, message);
-        intent.putExtra(TorConfig.EXTRA_PROGRESS, progress);
-        sendBroadcast(intent);
+    // Sends a STATUS broadcast to any registered UI receivers
+    private void BroadcastStatus(String Message, int Progress) {
+        Intent StatusIntent = new Intent(TorConfig.ActionStatus);
+        StatusIntent.putExtra(TorConfig.ExtraStatus, Status.GetState().name());
+        StatusIntent.putExtra(TorConfig.ExtraMessage, Message);
+        StatusIntent.putExtra(TorConfig.ExtraProgress, Progress);
+        sendBroadcast(StatusIntent);
     }
 
-    // ── Notification ──────────────────────────────────────────────────────────
-
-    private void createNotificationChannel() {
+    // Creates the notification channel required on Android O and above
+    private void CreateNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(
-                TorConfig.NOTIF_CHANNEL_ID,
-                TorConfig.NOTIF_CHANNEL_NAME,
+            NotificationChannel Channel = new NotificationChannel(
+                TorConfig.NotificationChannelId,
+                TorConfig.NotificationChannelName,
                 NotificationManager.IMPORTANCE_LOW
             );
-            channel.setDescription("Status koneksi TorDROID VPN");
-            NotificationManager nm = getSystemService(NotificationManager.class);
-            if (nm != null) nm.createNotificationChannel(channel);
+            Channel.setDescription("TorDROID VPN connection status");
+            NotificationManager Manager = getSystemService(NotificationManager.class);
+            if (Manager != null) Manager.createNotificationChannel(Channel);
         }
     }
 
-    private Notification buildNotification(String message, int progress) {
-        Intent mainIntent = new Intent(this, MainActivity.class);
-        PendingIntent pi = PendingIntent.getActivity(
+    // Builds a foreground notification with optional progress bar
+    private Notification BuildNotification(String Message, int Progress) {
+        Intent MainIntent = new Intent(this, MainActivity.class);
+        PendingIntent PendingIntentAction = PendingIntent.getActivity(
             this,
             0,
-            mainIntent,
+            MainIntent,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
 
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, TorConfig.NOTIF_CHANNEL_ID)
+        NotificationCompat.Builder Builder = new NotificationCompat.Builder(this, TorConfig.NotificationChannelId)
             .setSmallIcon(R.drawable.ic_tor_shield)
             .setContentTitle("TorDROID")
-            .setContentText(message)
+            .setContentText(Message)
             .setOngoing(true)
-            .setContentIntent(pi)
+            .setContentIntent(PendingIntentAction)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE);
 
-        if (progress > 0 && progress < 100) {
-            builder.setProgress(100, progress, false);
+        if (Progress > 0 && Progress < 100) {
+            Builder.setProgress(100, Progress, false);
         }
 
-        return builder.build();
+        return Builder.build();
     }
 
-    private void updateNotification(String message, int progress) {
-        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        if (nm != null) {
-            nm.notify(TorConfig.NOTIF_ID, buildNotification(message, progress));
+    // Posts an updated notification to the system tray
+    private void UpdateNotification(String Message, int Progress) {
+        NotificationManager Manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (Manager != null) {
+            Manager.notify(TorConfig.NotificationId, BuildNotification(Message, Progress));
         }
     }
 
-    // ── Public Accessors ──────────────────────────────────────────────────────
-
-    public TorStatus getTorStatus() {
-        return mStatus;
+    public TorStatus GetTorStatus() {
+        return Status;
     }
 
-    public boolean isRunning() {
-        return mRunning.get();
+    public boolean IsRunning() {
+        return Running.get();
     }
 }

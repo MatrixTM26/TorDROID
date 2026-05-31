@@ -8,157 +8,136 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.Socket;
 
-/**
- * TorControlClient - Komunikasi dengan Tor via Control Port (TCP)
- * Implementasi protokol Tor Control Protocol v1
- */
+// Communicates with the Tor daemon via the Control Port using TCP
 public class TorControlClient {
 
-    private static final String TAG = "TorControlClient";
+    private static final String Tag = "TorControlClient";
 
-    private Socket mSocket;
-    private BufferedReader mReader;
-    private BufferedWriter mWriter;
-    private boolean mConnected = false;
+    private Socket Socket;
+    private BufferedReader Reader;
+    private BufferedWriter Writer;
+    private boolean Connected = false;
 
-    /**
-     * Sambungkan ke Tor Control Port
-     */
-    public boolean connect() {
+    // Opens a TCP connection to the Tor Control port
+    public boolean Connect() {
         try {
-            mSocket = new Socket(TorConfig.TOR_HOST, TorConfig.CONTROL_PORT);
-            mSocket.setSoTimeout(5000);
-            mReader = new BufferedReader(new InputStreamReader(mSocket.getInputStream()));
-            mWriter = new BufferedWriter(new OutputStreamWriter(mSocket.getOutputStream()));
-            mConnected = true;
-            Log.d(TAG, "Terhubung ke Tor Control Port");
+            Socket = new java.net.Socket(TorConfig.TorHost, TorConfig.ControlPort);
+            Socket.setSoTimeout(5000);
+            Reader = new BufferedReader(new InputStreamReader(Socket.getInputStream()));
+            Writer = new BufferedWriter(new OutputStreamWriter(Socket.getOutputStream()));
+            Connected = true;
+            Log.d(Tag, "Connected to Tor Control port");
             return true;
         } catch (IOException e) {
-            Log.e(TAG, "Gagal koneksi ke Control Port: " + e.getMessage());
-            mConnected = false;
+            Log.e(Tag, "Failed to connect to Control port: " + e.getMessage());
+            Connected = false;
             return false;
         }
     }
 
-    /**
-     * Autentikasi ke Tor Control Port (null-auth / cookie)
-     */
-    public boolean authenticate() {
-        return authenticate("");
+    // Authenticates with the Tor Control port using an empty password
+    public boolean Authenticate() {
+        return Authenticate("");
     }
 
-    public boolean authenticate(String password) {
+    // Authenticates with the Tor Control port using the given password
+    public boolean Authenticate(String Password) {
         try {
-            String cmd = password.isEmpty() ? "AUTHENTICATE\r\n" : "AUTHENTICATE \"" + password + "\"\r\n";
-            sendCommand(cmd);
-            String resp = mReader.readLine();
-            Log.d(TAG, "Auth response: " + resp);
-            return resp != null && resp.startsWith("250");
+            String Command = Password.isEmpty() ? "AUTHENTICATE\r\n" : "AUTHENTICATE \"" + Password + "\"\r\n";
+            SendCommand(Command);
+            String Response = Reader.readLine();
+            Log.d(Tag, "Auth response: " + Response);
+            return Response != null && Response.startsWith("250");
         } catch (IOException e) {
-            Log.e(TAG, "Autentikasi gagal: " + e.getMessage());
+            Log.e(Tag, "Authentication failed: " + e.getMessage());
             return false;
         }
     }
 
-    /**
-     * Minta identitas baru (IP exit node baru)
-     * Setara dengan "New Circuit" di Tor Browser
-     */
-    public boolean newIdentity() {
+    // Requests a new Tor identity (new exit node / new circuit)
+    public boolean NewIdentity() {
         try {
-            sendCommand("SIGNAL NEWNYM\r\n");
-            String resp = mReader.readLine();
-            Log.d(TAG, "NEWNYM response: " + resp);
-            return resp != null && resp.startsWith("250");
+            SendCommand("SIGNAL NEWNYM\r\n");
+            String Response = Reader.readLine();
+            Log.d(Tag, "NEWNYM response: " + Response);
+            return Response != null && Response.startsWith("250");
         } catch (IOException e) {
-            Log.e(TAG, "NewIdentity gagal: " + e.getMessage());
+            Log.e(Tag, "NewIdentity failed: " + e.getMessage());
             return false;
         }
     }
 
-    /**
-     * Bersihkan semua circuit Tor
-     */
-    public boolean clearDnsCache() {
+    // Sends the CLEARDNSCACHE signal to Tor
+    public boolean ClearDnsCache() {
         try {
-            sendCommand("SIGNAL CLEARDNSCACHE\r\n");
-            String resp = mReader.readLine();
-            return resp != null && resp.startsWith("250");
+            SendCommand("SIGNAL CLEARDNSCACHE\r\n");
+            String Response = Reader.readLine();
+            return Response != null && Response.startsWith("250");
         } catch (IOException e) {
             return false;
         }
     }
 
-    /**
-     * Ambil IP exit node saat ini via checkip.torproject.org
-     */
-    public String getExitNodeIP() {
+    // Returns the IP address of the current Tor exit node
+    public String GetExitNodeIp() {
         try {
-            sendCommand("GETINFO address\r\n");
-            String resp = mReader.readLine();
-            if (resp != null && resp.startsWith("250-address=")) {
-                return resp.substring("250-address=".length()).trim();
+            SendCommand("GETINFO address\r\n");
+            String Response = Reader.readLine();
+            if (Response != null && Response.startsWith("250-address=")) {
+                return Response.substring("250-address=".length()).trim();
             }
         } catch (IOException e) {
-            Log.e(TAG, "Gagal ambil IP: " + e.getMessage());
+            Log.e(Tag, "Failed to get exit IP: " + e.getMessage());
         }
         return null;
     }
 
-    /**
-     * Ambil info circuit aktif
-     */
-    public String getCircuitStatus() {
+    // Returns the current Tor circuit status as a string
+    public String GetCircuitStatus() {
         try {
-            sendCommand("GETINFO circuit-status\r\n");
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = mReader.readLine()) != null) {
-                if (line.startsWith("250 ")) break;
-                sb.append(line).append("\n");
+            SendCommand("GETINFO circuit-status\r\n");
+            StringBuilder Builder = new StringBuilder();
+            String Line;
+            while ((Line = Reader.readLine()) != null) {
+                if (Line.startsWith("250 ")) break;
+                Builder.append(Line).append("\n");
             }
-            return sb.toString();
+            return Builder.toString();
         } catch (IOException e) {
             return "Error: " + e.getMessage();
         }
     }
 
-    /**
-     * Cek status bootstrap Tor
-     */
-    public String getBootstrapStatus() {
+    // Returns the current Tor bootstrap phase info string
+    public String GetBootstrapStatus() {
         try {
-            sendCommand("GETINFO status/bootstrap-phase\r\n");
-            String resp = mReader.readLine();
-            mReader.readLine(); // consume "250 OK"
-            return resp;
+            SendCommand("GETINFO status/bootstrap-phase\r\n");
+            String Response = Reader.readLine();
+            Reader.readLine(); // consume trailing "250 OK"
+            return Response;
         } catch (IOException e) {
             return null;
         }
     }
 
-    /**
-     * Kirim perintah raw ke Tor Control
-     */
-    private void sendCommand(String cmd) throws IOException {
-        mWriter.write(cmd);
-        mWriter.flush();
+    // Sends a raw command string to the Tor Control port
+    private void SendCommand(String Command) throws IOException {
+        Writer.write(Command);
+        Writer.flush();
     }
 
-    /**
-     * Tutup koneksi Control Port
-     */
-    public void disconnect() {
+    // Closes the Control port connection
+    public void Disconnect() {
         try {
-            if (mSocket != null && !mSocket.isClosed()) {
-                sendCommand("QUIT\r\n");
-                mSocket.close();
+            if (Socket != null && !Socket.isClosed()) {
+                SendCommand("QUIT\r\n");
+                Socket.close();
             }
-        } catch (IOException ignored) {}
-        mConnected = false;
+        } catch (IOException Ignored) {}
+        Connected = false;
     }
 
-    public boolean isConnected() {
-        return mConnected && mSocket != null && !mSocket.isClosed();
+    public boolean IsConnected() {
+        return Connected && Socket != null && !Socket.isClosed();
     }
 }

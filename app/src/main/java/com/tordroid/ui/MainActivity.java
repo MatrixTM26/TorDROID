@@ -18,355 +18,339 @@ import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
+
 import com.tordroid.R;
 import com.tordroid.service.TorProxyService;
 import com.tordroid.service.TorVpnService;
 import com.tordroid.util.TorConfig;
 import com.tordroid.util.TorStatus;
 
-/**
- * MainActivity - Antarmuka utama TorDROID
- *
- * Menampilkan:
- * - Status koneksi Tor (shield icon)
- * - Bootstrap progress bar
- * - Exit IP address
- * - Tombol Connect/Disconnect
- * - Tombol New Identity
- */
+// Main screen showing connection status, bootstrap progress, exit IP, and action buttons
 public class MainActivity extends AppCompatActivity {
 
-    private static final int VPN_REQUEST_CODE = 100;
-    private static final String TAG = "MainActivity";
+    private static final int VpnRequestCode = 100;
+    private static final String Tag = "MainActivity";
 
-    // ── Views ─────────────────────────────────────────────────────────────────
-    private ImageView mShieldIcon;
-    private TextView mStatusText;
-    private TextView mSubStatusText;
-    private ProgressBar mBootstrapProgress;
-    private TextView mProgressText;
-    private TextView mExitIpText;
-    private TextView mUptimeText;
-    private Button mConnectButton;
-    private Button mNewIdButton;
-    private CardView mIpCard;
-    private View mStatusDot;
+    // Views
+    private ImageView ShieldIcon;
+    private TextView StatusText;
+    private TextView SubStatusText;
+    private ProgressBar BootstrapProgress;
+    private TextView ProgressText;
+    private TextView ExitIpText;
+    private TextView UptimeText;
+    private Button ConnectButton;
+    private Button NewIdentityButton;
+    private CardView IpCard;
+    private View StatusDot;
 
-    // ── State ─────────────────────────────────────────────────────────────────
-    private TorStatus.State mCurrentState = TorStatus.State.STOPPED;
-    private Handler mHandler = new Handler(Looper.getMainLooper());
-    private Runnable mUptimeRunner;
-    private long mConnectedAt = 0;
-    private ObjectAnimator mPulseAnim;
+    // State
+    private TorStatus.State CurrentState = TorStatus.State.Stopped;
+    private Handler UiHandler = new Handler(Looper.getMainLooper());
+    private Runnable UptimeRunner;
+    private long ConnectedAt = 0;
+    private ObjectAnimator PulseAnimator;
 
-    // ── Broadcast Receiver ────────────────────────────────────────────────────
-    private final BroadcastReceiver mStatusReceiver = new BroadcastReceiver() {
+    // Receives status broadcasts from TorProxyService and updates the UI
+    private final BroadcastReceiver StatusReceiver = new BroadcastReceiver() {
         @Override
-        public void onReceive(Context context, Intent intent) {
-            if (!TorConfig.ACTION_STATUS.equals(intent.getAction())) return;
+        public void onReceive(Context AppContext, Intent ReceivedIntent) {
+            if (!TorConfig.ActionStatus.equals(ReceivedIntent.getAction())) return;
 
-            String stateStr = intent.getStringExtra(TorConfig.EXTRA_STATUS);
-            String message = intent.getStringExtra(TorConfig.EXTRA_MESSAGE);
-            int progress = intent.getIntExtra(TorConfig.EXTRA_PROGRESS, 0);
-            String exitIp = intent.getStringExtra(TorConfig.EXTRA_IP);
+            String StateString = ReceivedIntent.getStringExtra(TorConfig.ExtraStatus);
+            String Message = ReceivedIntent.getStringExtra(TorConfig.ExtraMessage);
+            int Progress = ReceivedIntent.getIntExtra(TorConfig.ExtraProgress, 0);
+            String ExitIp = ReceivedIntent.getStringExtra(TorConfig.ExtraIp);
 
-            if (stateStr != null) {
+            if (StateString != null) {
                 try {
-                    mCurrentState = TorStatus.State.valueOf(stateStr);
-                } catch (IllegalArgumentException ignored) {}
+                    CurrentState = TorStatus.State.valueOf(StateString);
+                } catch (IllegalArgumentException Ignored) {}
             }
 
-            updateUI(message, progress, exitIp);
+            UpdateUi(Message, Progress, ExitIp);
         }
     };
 
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
-
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    protected void onCreate(Bundle SavedInstanceState) {
+        super.onCreate(SavedInstanceState);
         setContentView(R.layout.activity_main);
-        bindViews();
-        setupClickListeners();
-        setupPulseAnimation();
-        updateUI("Siap untuk terhubung", 0, null);
+        BindViews();
+        SetupClickListeners();
+        SetupPulseAnimation();
+        UpdateUi("Ready to connect", 0, null);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        IntentFilter filter = new IntentFilter(TorConfig.ACTION_STATUS);
-        registerReceiver(mStatusReceiver, filter);
+        IntentFilter Filter = new IntentFilter(TorConfig.ActionStatus);
+        registerReceiver(StatusReceiver, Filter);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        unregisterReceiver(mStatusReceiver);
+        unregisterReceiver(StatusReceiver);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        stopUptimeTimer();
-        if (mPulseAnim != null) mPulseAnim.cancel();
+        StopUptimeTimer();
+        if (PulseAnimator != null) PulseAnimator.cancel();
     }
 
-    // ── View Binding ──────────────────────────────────────────────────────────
-
-    private void bindViews() {
-        mShieldIcon = findViewById(R.id.iv_shield);
-        mStatusText = findViewById(R.id.tv_status);
-        mSubStatusText = findViewById(R.id.tv_substatus);
-        mBootstrapProgress = findViewById(R.id.pb_bootstrap);
-        mProgressText = findViewById(R.id.tv_progress);
-        mExitIpText = findViewById(R.id.tv_exit_ip);
-        mUptimeText = findViewById(R.id.tv_uptime);
-        mConnectButton = findViewById(R.id.btn_connect);
-        mNewIdButton = findViewById(R.id.btn_new_identity);
-        mIpCard = findViewById(R.id.card_ip);
-        mStatusDot = findViewById(R.id.view_status_dot);
+    // Binds all view references from the layout
+    private void BindViews() {
+        ShieldIcon        = findViewById(R.id.iv_shield);
+        StatusText        = findViewById(R.id.tv_status);
+        SubStatusText     = findViewById(R.id.tv_substatus);
+        BootstrapProgress = findViewById(R.id.pb_bootstrap);
+        ProgressText      = findViewById(R.id.tv_progress);
+        ExitIpText        = findViewById(R.id.tv_exit_ip);
+        UptimeText        = findViewById(R.id.tv_uptime);
+        ConnectButton     = findViewById(R.id.btn_connect);
+        NewIdentityButton = findViewById(R.id.btn_new_identity);
+        IpCard            = findViewById(R.id.card_ip);
+        StatusDot         = findViewById(R.id.view_status_dot);
     }
 
-    // ── Click Listeners ───────────────────────────────────────────────────────
-
-    private void setupClickListeners() {
-        mConnectButton.setOnClickListener(v -> {
-            if (
-                mCurrentState == TorStatus.State.CONNECTED ||
-                mCurrentState == TorStatus.State.BOOTSTRAPPING ||
-                mCurrentState == TorStatus.State.STARTING
-            ) {
-                disconnectTor();
+    // Wires up button click listeners
+    private void SetupClickListeners() {
+        ConnectButton.setOnClickListener(V -> {
+            if (CurrentState == TorStatus.State.Connected
+                    || CurrentState == TorStatus.State.Bootstrapping
+                    || CurrentState == TorStatus.State.Starting) {
+                DisconnectTor();
             } else {
-                connectTor();
+                ConnectTor();
             }
         });
 
-        mNewIdButton.setOnClickListener(v -> requestNewIdentity());
+        NewIdentityButton.setOnClickListener(V -> RequestNewIdentity());
 
-        // IP Card: tap untuk copy
-        mIpCard.setOnClickListener(v -> {
-            String ip = mExitIpText.getText().toString();
-            if (!ip.isEmpty() && !ip.equals("-")) {
-                android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(
-                    Context.CLIPBOARD_SERVICE
-                );
-                cm.setPrimaryClip(android.content.ClipData.newPlainText("Exit IP", ip));
-                Toast.makeText(this, "IP disalin: " + ip, Toast.LENGTH_SHORT).show();
+        // Tap the IP card to copy the exit IP to clipboard
+        IpCard.setOnClickListener(V -> {
+            String Ip = ExitIpText.getText().toString();
+            if (!Ip.isEmpty() && !Ip.equals("-")) {
+                android.content.ClipboardManager Clipboard =
+                    (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                Clipboard.setPrimaryClip(
+                    android.content.ClipData.newPlainText("Exit IP", Ip));
+                Toast.makeText(this, "IP copied: " + Ip, Toast.LENGTH_SHORT).show();
             }
         });
     }
 
-    // ── Tor Connect/Disconnect ─────────────────────────────────────────────────
-
-    private void connectTor() {
-        // Minta izin VPN
-        Intent vpnIntent = VpnService.prepare(this);
-        if (vpnIntent != null) {
-            startActivityForResult(vpnIntent, VPN_REQUEST_CODE);
+    // Requests VPN permission then starts the Tor and VPN services
+    private void ConnectTor() {
+        Intent VpnIntent = VpnService.prepare(this);
+        if (VpnIntent != null) {
+            startActivityForResult(VpnIntent, VpnRequestCode);
         } else {
-            onVpnPermissionGranted();
+            OnVpnPermissionGranted();
         }
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == VPN_REQUEST_CODE) {
-            if (resultCode == Activity.RESULT_OK) {
-                onVpnPermissionGranted();
+    protected void onActivityResult(int RequestCode, int ResultCode, Intent Data) {
+        super.onActivityResult(RequestCode, ResultCode, Data);
+        if (RequestCode == VpnRequestCode) {
+            if (ResultCode == Activity.RESULT_OK) {
+                OnVpnPermissionGranted();
             } else {
-                Toast.makeText(this, "Izin VPN ditolak", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "VPN permission denied", Toast.LENGTH_SHORT).show();
             }
         }
     }
 
-    private void onVpnPermissionGranted() {
-        // Mulai Tor service
-        Intent torService = new Intent(this, TorProxyService.class);
-        torService.setAction(TorConfig.ACTION_START);
-        startForegroundService(torService);
+    // Starts both TorProxyService and TorVpnService after permission is granted
+    private void OnVpnPermissionGranted() {
+        Intent TorServiceIntent = new Intent(this, TorProxyService.class);
+        TorServiceIntent.setAction(TorConfig.ActionStart);
+        startForegroundService(TorServiceIntent);
 
-        // Mulai VPN service
-        Intent vpnService = new Intent(this, TorVpnService.class);
-        vpnService.setAction(TorConfig.ACTION_START);
-        startService(vpnService);
+        Intent VpnServiceIntent = new Intent(this, TorVpnService.class);
+        VpnServiceIntent.setAction(TorConfig.ActionStart);
+        startService(VpnServiceIntent);
 
-        mCurrentState = TorStatus.State.STARTING;
-        updateUI("Memulai koneksi Tor...", 0, null);
+        CurrentState = TorStatus.State.Starting;
+        UpdateUi("Starting Tor connection...", 0, null);
     }
 
-    private void disconnectTor() {
-        // Stop Tor service
-        Intent torService = new Intent(this, TorProxyService.class);
-        torService.setAction(TorConfig.ACTION_STOP);
-        startService(torService);
+    // Sends stop actions to both services
+    private void DisconnectTor() {
+        Intent TorServiceIntent = new Intent(this, TorProxyService.class);
+        TorServiceIntent.setAction(TorConfig.ActionStop);
+        startService(TorServiceIntent);
 
-        // Stop VPN service
-        Intent vpnService = new Intent(this, TorVpnService.class);
-        vpnService.setAction(TorConfig.ACTION_STOP);
-        startService(vpnService);
+        Intent VpnServiceIntent = new Intent(this, TorVpnService.class);
+        VpnServiceIntent.setAction(TorConfig.ActionStop);
+        startService(VpnServiceIntent);
 
-        mCurrentState = TorStatus.State.STOPPED;
-        stopUptimeTimer();
-        updateUI("Terputus dari Tor", 0, null);
+        CurrentState = TorStatus.State.Stopped;
+        StopUptimeTimer();
+        UpdateUi("Disconnected from Tor", 0, null);
     }
 
-    private void requestNewIdentity() {
-        Intent service = new Intent(this, TorProxyService.class);
-        service.setAction(TorConfig.ACTION_NEWID);
-        startService(service);
-        Toast.makeText(this, "Meminta identitas baru...", Toast.LENGTH_SHORT).show();
+    // Sends the new identity action to TorProxyService
+    private void RequestNewIdentity() {
+        Intent ServiceIntent = new Intent(this, TorProxyService.class);
+        ServiceIntent.setAction(TorConfig.ActionNewIdentity);
+        startService(ServiceIntent);
+        Toast.makeText(this, "Requesting new identity...", Toast.LENGTH_SHORT).show();
     }
 
-    // ── UI Update ─────────────────────────────────────────────────────────────
-
-    private void updateUI(String message, int progress, String exitIp) {
+    // Updates all UI elements to reflect the current connection state
+    private void UpdateUi(String Message, int Progress, String ExitIp) {
         runOnUiThread(() -> {
-            switch (mCurrentState) {
-                case STOPPED:
-                    setShieldState(false, false);
-                    mStatusText.setText("Tidak Terlindungi");
-                    mStatusText.setTextColor(getColor(R.color.color_disconnected));
-                    mSubStatusText.setText("Koneksi Anda tidak terenkripsi");
-                    mConnectButton.setText("Hubungkan Tor");
-                    mConnectButton.setBackgroundTintList(getColorStateList(R.color.color_accent_green));
-                    mBootstrapProgress.setVisibility(View.GONE);
-                    mProgressText.setVisibility(View.GONE);
-                    mNewIdButton.setEnabled(false);
-                    mIpCard.setVisibility(View.INVISIBLE);
-                    stopUptimeTimer();
+            switch (CurrentState) {
+                case Stopped:
+                    SetShieldState(false, false);
+                    StatusText.setText("Not Protected");
+                    StatusText.setTextColor(getColor(R.color.color_disconnected));
+                    SubStatusText.setText("Your connection is not encrypted");
+                    ConnectButton.setText("Connect to Tor");
+                    ConnectButton.setBackgroundTintList(
+                        getColorStateList(R.color.color_accent_green));
+                    BootstrapProgress.setVisibility(View.GONE);
+                    ProgressText.setVisibility(View.GONE);
+                    NewIdentityButton.setEnabled(false);
+                    IpCard.setVisibility(View.INVISIBLE);
+                    StopUptimeTimer();
                     break;
-                case STARTING:
-                case BOOTSTRAPPING:
-                    setShieldState(false, true);
-                    mStatusText.setText("Menghubungkan...");
-                    mStatusText.setTextColor(getColor(R.color.color_connecting));
-                    mSubStatusText.setText(message != null ? message : "Membangun sirkuit Tor");
-                    mConnectButton.setText("Batalkan");
-                    mConnectButton.setBackgroundTintList(getColorStateList(R.color.color_disconnected));
-                    mBootstrapProgress.setVisibility(View.VISIBLE);
-                    mProgressText.setVisibility(View.VISIBLE);
-                    if (progress >= 0) {
-                        animateProgress(progress);
-                        mProgressText.setText(progress + "%");
+
+                case Starting:
+                case Bootstrapping:
+                    SetShieldState(false, true);
+                    StatusText.setText("Connecting...");
+                    StatusText.setTextColor(getColor(R.color.color_connecting));
+                    SubStatusText.setText(Message != null ? Message : "Building Tor circuits");
+                    ConnectButton.setText("Cancel");
+                    ConnectButton.setBackgroundTintList(
+                        getColorStateList(R.color.color_disconnected));
+                    BootstrapProgress.setVisibility(View.VISIBLE);
+                    ProgressText.setVisibility(View.VISIBLE);
+                    if (Progress >= 0) {
+                        AnimateProgress(Progress);
+                        ProgressText.setText(Progress + "%");
                     }
-                    mNewIdButton.setEnabled(false);
+                    NewIdentityButton.setEnabled(false);
                     break;
-                case CONNECTED:
-                    setShieldState(true, false);
-                    mStatusText.setText("Terlindungi");
-                    mStatusText.setTextColor(getColor(R.color.color_connected));
-                    mSubStatusText.setText("Traffic Anda dirutekan melalui Tor");
-                    mConnectButton.setText("Putuskan");
-                    mConnectButton.setBackgroundTintList(getColorStateList(R.color.color_disconnected));
-                    mBootstrapProgress.setVisibility(View.GONE);
-                    mProgressText.setVisibility(View.GONE);
-                    mNewIdButton.setEnabled(true);
-                    mIpCard.setVisibility(View.VISIBLE);
-                    if (mConnectedAt == 0) {
-                        mConnectedAt = System.currentTimeMillis();
-                        startUptimeTimer();
+
+                case Connected:
+                    SetShieldState(true, false);
+                    StatusText.setText("Protected");
+                    StatusText.setTextColor(getColor(R.color.color_connected));
+                    SubStatusText.setText("Your traffic is routed through Tor");
+                    ConnectButton.setText("Disconnect");
+                    ConnectButton.setBackgroundTintList(
+                        getColorStateList(R.color.color_disconnected));
+                    BootstrapProgress.setVisibility(View.GONE);
+                    ProgressText.setVisibility(View.GONE);
+                    NewIdentityButton.setEnabled(true);
+                    IpCard.setVisibility(View.VISIBLE);
+                    if (ConnectedAt == 0) {
+                        ConnectedAt = System.currentTimeMillis();
+                        StartUptimeTimer();
                     }
                     break;
-                case ERROR:
-                    setShieldState(false, false);
-                    mStatusText.setText("Error");
-                    mStatusText.setTextColor(getColor(R.color.color_disconnected));
-                    mSubStatusText.setText(message != null ? message : "Terjadi kesalahan");
-                    mConnectButton.setText("Coba Lagi");
-                    mBootstrapProgress.setVisibility(View.GONE);
-                    mNewIdButton.setEnabled(false);
-                    stopUptimeTimer();
+
+                case Error:
+                    SetShieldState(false, false);
+                    StatusText.setText("Error");
+                    StatusText.setTextColor(getColor(R.color.color_disconnected));
+                    SubStatusText.setText(Message != null ? Message : "An error occurred");
+                    ConnectButton.setText("Retry");
+                    BootstrapProgress.setVisibility(View.GONE);
+                    NewIdentityButton.setEnabled(false);
+                    StopUptimeTimer();
                     break;
             }
 
-            if (exitIp != null && !exitIp.isEmpty()) {
-                mExitIpText.setText(exitIp);
+            if (ExitIp != null && !ExitIp.isEmpty()) {
+                ExitIpText.setText(ExitIp);
             }
         });
     }
 
-    private void setShieldState(boolean connected, boolean loading) {
-        if (connected) {
-            mShieldIcon.setImageResource(R.drawable.ic_shield_on);
-            mShieldIcon.setColorFilter(getColor(R.color.color_connected));
-            mStatusDot.setBackgroundResource(R.drawable.bg_dot_connected);
-            startPulseAnimation();
-        } else if (loading) {
-            mShieldIcon.setImageResource(R.drawable.ic_shield_loading);
-            mShieldIcon.setColorFilter(getColor(R.color.color_connecting));
-            mStatusDot.setBackgroundResource(R.drawable.bg_dot_connecting);
+    // Sets the shield icon and status dot to reflect connected, loading, or disconnected
+    private void SetShieldState(boolean IsConnected, boolean IsLoading) {
+        if (IsConnected) {
+            ShieldIcon.setImageResource(R.drawable.ic_shield_on);
+            ShieldIcon.setColorFilter(getColor(R.color.color_connected));
+            StatusDot.setBackgroundResource(R.drawable.bg_dot_connected);
+            StartPulseAnimation();
+        } else if (IsLoading) {
+            ShieldIcon.setImageResource(R.drawable.ic_shield_loading);
+            ShieldIcon.setColorFilter(getColor(R.color.color_connecting));
+            StatusDot.setBackgroundResource(R.drawable.bg_dot_connecting);
         } else {
-            mShieldIcon.setImageResource(R.drawable.ic_shield_off);
-            mShieldIcon.setColorFilter(getColor(R.color.color_disconnected));
-            mStatusDot.setBackgroundResource(R.drawable.bg_dot_disconnected);
-            stopPulseAnimation();
+            ShieldIcon.setImageResource(R.drawable.ic_shield_off);
+            ShieldIcon.setColorFilter(getColor(R.color.color_disconnected));
+            StatusDot.setBackgroundResource(R.drawable.bg_dot_disconnected);
+            StopPulseAnimation();
         }
     }
 
-    private void animateProgress(int target) {
-        ObjectAnimator anim = ObjectAnimator.ofInt(
-            mBootstrapProgress,
-            "progress",
-            mBootstrapProgress.getProgress(),
-            target
-        );
-        anim.setDuration(500);
-        anim.setInterpolator(new DecelerateInterpolator());
-        anim.start();
+    // Smoothly animates the progress bar to the target value
+    private void AnimateProgress(int Target) {
+        ObjectAnimator Animator = ObjectAnimator.ofInt(
+            BootstrapProgress, "progress",
+            BootstrapProgress.getProgress(), Target);
+        Animator.setDuration(500);
+        Animator.setInterpolator(new DecelerateInterpolator());
+        Animator.start();
     }
 
-    // ── Animations ────────────────────────────────────────────────────────────
-
-    private void setupPulseAnimation() {
-        mPulseAnim = ObjectAnimator.ofFloat(mShieldIcon, "alpha", 1f, 0.5f);
-        mPulseAnim.setDuration(800);
-        mPulseAnim.setRepeatCount(ValueAnimator.INFINITE);
-        mPulseAnim.setRepeatMode(ValueAnimator.REVERSE);
+    // Sets up the alpha pulse animation for the shield icon
+    private void SetupPulseAnimation() {
+        PulseAnimator = ObjectAnimator.ofFloat(ShieldIcon, "alpha", 1f, 0.5f);
+        PulseAnimator.setDuration(800);
+        PulseAnimator.setRepeatCount(ValueAnimator.INFINITE);
+        PulseAnimator.setRepeatMode(ValueAnimator.REVERSE);
     }
 
-    private void startPulseAnimation() {
-        if (mPulseAnim != null && !mPulseAnim.isRunning()) {
-            mPulseAnim.cancel();
-            mShieldIcon.setAlpha(1f);
+    private void StartPulseAnimation() {
+        if (PulseAnimator != null && !PulseAnimator.isRunning()) {
+            ShieldIcon.setAlpha(1f);
         }
     }
 
-    private void stopPulseAnimation() {
-        if (mPulseAnim != null && mPulseAnim.isRunning()) {
-            mPulseAnim.cancel();
+    private void StopPulseAnimation() {
+        if (PulseAnimator != null && PulseAnimator.isRunning()) {
+            PulseAnimator.cancel();
         }
-        mShieldIcon.setAlpha(1f);
+        ShieldIcon.setAlpha(1f);
     }
 
-    // ── Uptime Timer ──────────────────────────────────────────────────────────
-
-    private void startUptimeTimer() {
-        mUptimeRunner = new Runnable() {
+    // Starts a 1-second tick that updates the uptime display
+    private void StartUptimeTimer() {
+        UptimeRunner = new Runnable() {
             @Override
             public void run() {
-                if (mConnectedAt > 0) {
-                    long diff = System.currentTimeMillis() - mConnectedAt;
-                    long h = (diff / 3600000) % 24;
-                    long m = (diff / 60000) % 60;
-                    long s = (diff / 1000) % 60;
-                    mUptimeText.setText(String.format("%02d:%02d:%02d", h, m, s));
-                    mHandler.postDelayed(this, 1000);
+                if (ConnectedAt > 0) {
+                    long Diff = System.currentTimeMillis() - ConnectedAt;
+                    long Hours   = (Diff / 3600000) % 24;
+                    long Minutes = (Diff / 60000) % 60;
+                    long Seconds = (Diff / 1000) % 60;
+                    UptimeText.setText(String.format("%02d:%02d:%02d", Hours, Minutes, Seconds));
+                    UiHandler.postDelayed(this, 1000);
                 }
             }
         };
-        mHandler.post(mUptimeRunner);
+        UiHandler.post(UptimeRunner);
     }
 
-    private void stopUptimeTimer() {
-        if (mUptimeRunner != null) {
-            mHandler.removeCallbacks(mUptimeRunner);
-        }
-        mConnectedAt = 0;
-        if (mUptimeText != null) mUptimeText.setText("00:00:00");
+    // Stops the uptime timer and resets the display
+    private void StopUptimeTimer() {
+        if (UptimeRunner != null) UiHandler.removeCallbacks(UptimeRunner);
+        ConnectedAt = 0;
+        if (UptimeText != null) UptimeText.setText("00:00:00");
     }
 }

@@ -4,45 +4,31 @@ import android.content.Intent;
 import android.net.VpnService;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
+
 import com.tordroid.util.TorConfig;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
+
 import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
-import java.nio.channels.DatagramChannel;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * TorVpnService - Android VPN Service
- *
- * Membuat interface VPN virtual yang menangkap semua traffic
- * dan meneruskannya melalui Tor SOCKS5 proxy.
- *
- * Alur:
- * Device App → VPN Interface (tun0) → TorVpnService → Tor SOCKS5 → Internet
- */
+// Creates and manages the Android VPN interface that routes all traffic through Tor
+// Flow: App -> VPN interface (tun0) -> TorVpnService -> Tor SOCKS5 -> Internet
 public class TorVpnService extends VpnService {
 
-    private static final String TAG = "TorVpnService";
+    private static final String Tag = "TorVpnService";
 
-    private ParcelFileDescriptor mVpnInterface;
-    private ExecutorService mExecutor;
-    private AtomicBoolean mRunning = new AtomicBoolean(false);
-    private Thread mVpnThread;
+    private ParcelFileDescriptor VpnInterface;
+    private ExecutorService Executor;
+    private AtomicBoolean Running = new AtomicBoolean(false);
 
     @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null) return START_NOT_STICKY;
+    public int onStartCommand(Intent IntentParam, int Flags, int StartId) {
+        if (IntentParam == null) return START_NOT_STICKY;
 
-        String action = intent.getAction();
-        if (TorConfig.ACTION_START.equals(action)) {
-            startVpn();
-        } else if (TorConfig.ACTION_STOP.equals(action)) {
-            stopVpn();
-        }
+        String Action = IntentParam.getAction();
+        if (TorConfig.ActionStart.equals(Action))    StartVpn();
+        else if (TorConfig.ActionStop.equals(Action)) StopVpn();
 
         return START_STICKY;
     }
@@ -50,137 +36,101 @@ public class TorVpnService extends VpnService {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        stopVpn();
+        StopVpn();
     }
 
-    // ── VPN Control ───────────────────────────────────────────────────────────
-
-    /**
-     * Bangun dan mulai VPN interface
-     */
-    private void startVpn() {
-        if (mRunning.get()) return;
+    // Builds the VPN interface and starts packet routing
+    private void StartVpn() {
+        if (Running.get()) return;
 
         try {
-            // Bangun VPN interface
-            Builder builder = new Builder()
-                .setMtu(TorConfig.VPN_MTU)
-                .addAddress(TorConfig.VPN_ADDRESS, TorConfig.VPN_PREFIX)
-                .addRoute(TorConfig.VPN_ROUTE, 0)
-                .addDnsServer(TorConfig.VPN_DNS)
+            Builder VpnBuilder = new Builder()
+                .setMtu(TorConfig.VpnMtu)
+                .addAddress(TorConfig.VpnAddress, TorConfig.VpnPrefix)
+                .addRoute(TorConfig.VpnRoute, 0)
+                .addDnsServer(TorConfig.VpnDns)
                 .setSession("TorDROID")
                 .setBlocking(true);
 
-            // Kecualikan aplikasi TorDROID sendiri dari VPN
-            // agar bisa koneksi langsung ke Tor
+            // Exclude TorDROID itself so it can reach the Tor daemon directly
             try {
-                builder.addDisallowedApplication(getPackageName());
-            } catch (Exception ignored) {}
+                VpnBuilder.addDisallowedApplication(getPackageName());
+            } catch (Exception Ignored) {}
 
-            mVpnInterface = builder.establish();
-            if (mVpnInterface == null) {
-                Log.e(TAG, "Gagal membuat VPN interface");
+            VpnInterface = VpnBuilder.establish();
+            if (VpnInterface == null) {
+                Log.e(Tag, "Failed to establish VPN interface");
                 return;
             }
 
-            mRunning.set(true);
-            Log.d(TAG, "VPN interface dibuat, memulai packet routing...");
+            Running.set(true);
+            Log.d(Tag, "VPN interface established, starting packet routing");
 
-            // Mulai thread routing
-            mExecutor = Executors.newFixedThreadPool(2);
-            startPacketRouting();
+            Executor = Executors.newFixedThreadPool(2);
+            StartPacketRouting();
+
         } catch (Exception e) {
-            Log.e(TAG, "Error memulai VPN", e);
+            Log.e(Tag, "Error starting VPN", e);
         }
     }
 
-    /**
-     * Hentikan VPN interface
-     */
-    private void stopVpn() {
-        mRunning.set(false);
+    // Tears down the VPN interface and stops all related threads
+    private void StopVpn() {
+        Running.set(false);
 
-        if (mVpnThread != null) {
-            mVpnThread.interrupt();
-        }
+        if (Executor != null) Executor.shutdownNow();
 
-        if (mExecutor != null) {
-            mExecutor.shutdownNow();
-        }
-
-        if (mVpnInterface != null) {
+        if (VpnInterface != null) {
             try {
-                mVpnInterface.close();
+                VpnInterface.close();
             } catch (IOException e) {
-                Log.e(TAG, "Error menutup VPN interface", e);
+                Log.e(Tag, "Error closing VPN interface", e);
             }
-            mVpnInterface = null;
+            VpnInterface = null;
         }
 
         stopSelf();
-        Log.d(TAG, "VPN dihentikan");
+        Log.d(Tag, "VPN stopped");
     }
 
-    /**
-     * Mulai routing paket antara VPN interface dan Tor SOCKS proxy
-     *
-     * Catatan: Implementasi packet-level routing di Android membutuhkan
-     * manipulasi IP/TCP headers. Untuk fungsionalitas penuh, gunakan
-     * library tun2socks (tersedia di assets).
-     */
-    private void startPacketRouting() {
-        mExecutor.execute(() -> {
+    // Launches the tun2socks process to bridge the VPN tun device with Tor SOCKS5
+    private void StartPacketRouting() {
+        Executor.execute(() -> {
             try {
-                // Gunakan tun2socks untuk forward semua traffic ke SOCKS5
-                startTun2Socks();
+                StartTun2Socks();
             } catch (Exception e) {
-                Log.e(TAG, "Error routing paket", e);
+                Log.e(Tag, "Packet routing error", e);
             }
         });
     }
 
-    /**
-     * Jalankan tun2socks binary untuk bridging VPN <-> SOCKS5
-     *
-     * tun2socks menangkap paket dari tun interface dan
-     * meneruskannya ke Tor SOCKS5 proxy secara transparan.
-     */
-    private void startTun2Socks() {
+    // Runs the tun2socks binary which transparently forwards packets to Tor SOCKS5
+    private void StartTun2Socks() {
         try {
-            String tun2socksBin = getFilesDir() + "/tun2socks";
-            String socksAddr = TorConfig.TOR_HOST + ":" + TorConfig.SOCKS_PORT;
-            String tunFd = String.valueOf(mVpnInterface.getFd());
+            String Tun2SocksBin = getFilesDir() + "/tun2socks";
+            String SocksAddr = TorConfig.TorHost + ":" + TorConfig.SocksPort;
+            String TunFd = String.valueOf(VpnInterface.getFd());
 
-            // Perintah tun2socks
-            String[] cmd = {
-                tun2socksBin,
-                "--netif-ipaddr",
-                TorConfig.VPN_DNS, // Gateway VPN
-                "--netif-netmask",
-                "255.255.255.0",
-                "--socks-server-addr",
-                socksAddr, // Tor SOCKS5
-                "--tunfd",
-                tunFd,
-                "--tunmtu",
-                String.valueOf(TorConfig.VPN_MTU),
-                "--sock-path",
-                getFilesDir() + "/tun2socks.sock",
+            String[] Command = {
+                Tun2SocksBin,
+                "--netif-ipaddr",        TorConfig.VpnDns,
+                "--netif-netmask",       "255.255.255.0",
+                "--socks-server-addr",   SocksAddr,
+                "--tunfd",               TunFd,
+                "--tunmtu",              String.valueOf(TorConfig.VpnMtu),
+                "--sock-path",           getFilesDir() + "/tun2socks.sock",
                 "--enable-udp",
-                "--udpgw-remote-server-addr",
-                socksAddr,
-                "--loglevel",
-                "3",
+                "--udpgw-remote-server-addr", SocksAddr,
+                "--loglevel",            "3"
             };
 
-            ProcessBuilder pb = new ProcessBuilder(cmd);
-            pb.environment().put("HOME", getFilesDir().getAbsolutePath());
+            ProcessBuilder Builder = new ProcessBuilder(Command);
+            Builder.environment().put("HOME", getFilesDir().getAbsolutePath());
 
-            Process process = pb.start();
-            Log.d(TAG, "tun2socks dimulai, PID: " + process.pid());
+            Process Tun2SocksProcess = Builder.start();
+            Log.d(Tag, "tun2socks started, PID: " + Tun2SocksProcess.pid());
 
-            // Monitor sampai dihentikan
-            while (mRunning.get()) {
+            while (Running.get()) {
                 try {
                     Thread.sleep(1000);
                 } catch (InterruptedException e) {
@@ -188,11 +138,10 @@ public class TorVpnService extends VpnService {
                 }
             }
 
-            process.destroy();
+            Tun2SocksProcess.destroy();
+
         } catch (IOException e) {
-            Log.e(TAG, "Gagal menjalankan tun2socks: " + e.getMessage());
-            // Fallback: mode proxy manual
-            Log.d(TAG, "Fallback ke mode proxy manual");
+            Log.e(Tag, "Failed to run tun2socks: " + e.getMessage());
         }
     }
 }

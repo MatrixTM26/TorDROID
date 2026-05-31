@@ -1,102 +1,99 @@
 package com.tordroid.util;
 
-/**
- * TorStatus - Representasi status koneksi TorDROID
- */
+// Represents the current connection state of TorDROID
 public class TorStatus {
 
     public enum State {
-        STOPPED, // Tor tidak berjalan
-        STARTING, // Sedang memulai Tor
-        BOOTSTRAPPING, // Terhubung ke jaringan Tor, melakukan bootstrap
-        CONNECTED, // Siap digunakan (bootstrap 100%)
-        STOPPING, // Sedang menghentikan Tor
-        ERROR, // Terjadi error
+        Stopped,
+        Starting,
+        Bootstrapping,
+        Connected,
+        Stopping,
+        Error
     }
 
-    private State mState;
-    private int mBootstrapPercent;
-    private String mBootstrapMessage;
-    private String mExitIp;
-    private long mConnectedAt;
-    private String mErrorMessage;
+    private State State;
+    private int BootstrapPercent;
+    private String BootstrapMessage;
+    private String ExitIp;
+    private long ConnectedAt;
+    private String ErrorMessage;
 
     public TorStatus() {
-        mState = State.STOPPED;
-        mBootstrapPercent = 0;
+        State = com.tordroid.util.TorStatus.State.Stopped;
+        BootstrapPercent = 0;
     }
 
-    // ── Getters & Setters ─────────────────────────────────────────────────────
-
-    public State getState() {
-        return mState;
+    public com.tordroid.util.TorStatus.State GetState() {
+        return State;
     }
 
-    public void setState(State state) {
-        mState = state;
-        if (state == State.CONNECTED) {
-            mConnectedAt = System.currentTimeMillis();
+    public void SetState(com.tordroid.util.TorStatus.State NewState) {
+        State = NewState;
+        if (NewState == com.tordroid.util.TorStatus.State.Connected) {
+            ConnectedAt = System.currentTimeMillis();
         }
     }
 
-    public int getBootstrapPercent() {
-        return mBootstrapPercent;
+    public int GetBootstrapPercent() {
+        return BootstrapPercent;
     }
 
-    public void setBootstrapPercent(int percent) {
-        mBootstrapPercent = percent;
+    public void SetBootstrapPercent(int Percent) {
+        BootstrapPercent = Percent;
     }
 
-    public String getBootstrapMessage() {
-        return mBootstrapMessage;
+    public String GetBootstrapMessage() {
+        return BootstrapMessage;
     }
 
-    public void setBootstrapMessage(String msg) {
-        mBootstrapMessage = msg;
+    public void SetBootstrapMessage(String Message) {
+        BootstrapMessage = Message;
     }
 
-    public String getExitIp() {
-        return mExitIp;
+    public String GetExitIp() {
+        return ExitIp;
     }
 
-    public void setExitIp(String ip) {
-        mExitIp = ip;
+    public void SetExitIp(String Ip) {
+        ExitIp = Ip;
     }
 
-    public long getConnectedAt() {
-        return mConnectedAt;
+    public long GetConnectedAt() {
+        return ConnectedAt;
     }
 
-    public String getErrorMessage() {
-        return mErrorMessage;
+    public String GetErrorMessage() {
+        return ErrorMessage;
     }
 
-    public void setErrorMessage(String msg) {
-        mErrorMessage = msg;
+    public void SetErrorMessage(String Message) {
+        ErrorMessage = Message;
     }
 
-    public boolean isActive() {
-        return mState == State.CONNECTED || mState == State.BOOTSTRAPPING;
+    public boolean IsActive() {
+        return State == com.tordroid.util.TorStatus.State.Connected
+            || State == com.tordroid.util.TorStatus.State.Bootstrapping;
     }
 
-    public boolean isConnected() {
-        return mState == State.CONNECTED;
+    public boolean IsConnected() {
+        return State == com.tordroid.util.TorStatus.State.Connected;
     }
 
-    /**
-     * Hitung durasi koneksi
-     */
-    public String getUptime() {
-        if (mConnectedAt == 0) return "00:00:00";
-        long diff = System.currentTimeMillis() - mConnectedAt;
-        long h = (diff / 3600000) % 24;
-        long m = (diff / 60000) % 60;
-        long s = (diff / 1000) % 60;
-        return String.format("%02d:%02d:%02d", h, m, s);
+    // Returns formatted uptime string HH:MM:SS
+    public String GetUptime() {
+        if (ConnectedAt == 0) return "00:00:00";
+        long Diff = System.currentTimeMillis() - ConnectedAt;
+        long Hours = (Diff / 3600000) % 24;
+        long Minutes = (Diff / 60000) % 60;
+        long Seconds = (Diff / 1000) % 60;
+        return String.format("%02d:%02d:%02d", Hours, Minutes, Seconds);
     }
 
     @Override
     public String toString() {
-        return "TorStatus{state=" + mState + ", bootstrap=" + mBootstrapPercent + "%" + ", exitIp=" + mExitIp + "}";
+        return "TorStatus { State=" + State
+            + ", Bootstrap=" + BootstrapPercent + "%"
+            + ", ExitIp=" + ExitIp + " }";
     }
 }

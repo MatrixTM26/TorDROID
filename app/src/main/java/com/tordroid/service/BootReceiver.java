@@ -7,28 +7,25 @@ import android.content.SharedPreferences;
 import android.util.Log;
 import com.tordroid.util.TorConfig;
 
-/**
- * BootReceiver - Auto-start TorDROID saat device boot
- * (jika opsi autostart diaktifkan di pengaturan)
- */
+// Receives the BOOT_COMPLETED broadcast and auto-starts TorDROID if enabled
 public class BootReceiver extends BroadcastReceiver {
 
-    private static final String TAG = "BootReceiver";
-    private static final String PREF = "tordroid_prefs";
-    private static final String KEY_AUTOSTART = "autostart";
+    private static final String Tag = "BootReceiver";
+    private static final String PrefFile = "tordroid_prefs";
+    private static final String KeyAutoStart = "autostart";
 
     @Override
-    public void onReceive(Context context, Intent intent) {
-        if (!Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) return;
+    public void onReceive(Context AppContext, Intent ReceivedIntent) {
+        if (!Intent.ACTION_BOOT_COMPLETED.equals(ReceivedIntent.getAction())) return;
 
-        SharedPreferences prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE);
-        boolean autostart = prefs.getBoolean(KEY_AUTOSTART, false);
+        SharedPreferences Prefs = AppContext.getSharedPreferences(PrefFile, Context.MODE_PRIVATE);
+        boolean AutoStart = Prefs.getBoolean(KeyAutoStart, false);
 
-        if (autostart) {
-            Log.d(TAG, "Boot completed, memulai TorDROID...");
-            Intent service = new Intent(context, TorProxyService.class);
-            service.setAction(TorConfig.ACTION_START);
-            context.startForegroundService(service);
+        if (AutoStart) {
+            Log.d(Tag, "Boot completed, starting TorDROID...");
+            Intent ServiceIntent = new Intent(AppContext, TorProxyService.class);
+            ServiceIntent.setAction(TorConfig.ActionStart);
+            AppContext.startForegroundService(ServiceIntent);
         }
     }
 }
