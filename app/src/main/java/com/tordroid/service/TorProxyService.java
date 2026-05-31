@@ -11,13 +11,16 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
+
 import androidx.core.app.NotificationCompat;
+
 import com.tordroid.R;
 import com.tordroid.ui.MainActivity;
 import com.tordroid.util.TorConfig;
 import com.tordroid.util.TorControlClient;
 import com.tordroid.util.TorStatus;
 import com.tordroid.util.TorUtils;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -39,7 +42,6 @@ public class TorProxyService extends Service {
     private TorControlClient ControlClient;
 
     public class ServiceBinder extends Binder {
-
         public TorProxyService GetService() {
             return TorProxyService.this;
         }
@@ -112,6 +114,7 @@ public class TorProxyService extends Service {
 
                 Log.d(Tag, "Tor process started");
                 MonitorTorLog();
+
             } catch (Exception e) {
                 Log.e(Tag, "Error starting Tor", e);
                 HandleError("Error: " + e.getMessage());
@@ -153,9 +156,7 @@ public class TorProxyService extends Service {
             }
             if (ControlClient.NewIdentity()) {
                 BroadcastStatus("New identity requested successfully", -1);
-                try {
-                    Thread.sleep(3000);
-                } catch (InterruptedException Ignored) {}
+                try { Thread.sleep(3000); } catch (InterruptedException Ignored) {}
                 FetchAndBroadcastExitIp();
             } else {
                 BroadcastStatus("Failed to request new identity", -1);
@@ -176,11 +177,11 @@ public class TorProxyService extends Service {
         String Abi = Build.SUPPORTED_ABIS[0];
         String AssetName;
 
-        if (Abi.contains("arm64")) AssetName = "tor-arm64";
+        if (Abi.contains("arm64"))       AssetName = "tor-arm64";
         else if (Abi.contains("armeabi")) AssetName = "tor-armeabi";
         else if (Abi.contains("x86_64")) AssetName = "tor-x86_64";
-        else if (Abi.contains("x86")) AssetName = "tor-x86";
-        else AssetName = "tor-arm64";
+        else if (Abi.contains("x86"))    AssetName = "tor-x86";
+        else                             AssetName = "tor-arm64";
 
         Log.d(Tag, "Copying Tor binary: " + AssetName);
         return TorUtils.CopyAsset(this, AssetName, DestPath);
@@ -188,7 +189,9 @@ public class TorProxyService extends Service {
 
     // Reads Tor stdout log and parses bootstrap progress lines
     private void MonitorTorLog() {
-        try (BufferedReader LogReader = new BufferedReader(new InputStreamReader(TorProcess.getInputStream()))) {
+        try (BufferedReader LogReader = new BufferedReader(
+                new InputStreamReader(TorProcess.getInputStream()))) {
+
             String Line;
             while ((Line = LogReader.readLine()) != null && Running.get()) {
                 Log.d(Tag, "[TOR] " + Line);
@@ -211,6 +214,7 @@ public class TorProxyService extends Service {
             }
 
             if (Running.get()) HandleError("Tor process stopped unexpectedly");
+
         } catch (IOException e) {
             if (Running.get()) HandleError("Error reading Tor log: " + e.getMessage());
         }
@@ -222,9 +226,7 @@ public class TorProxyService extends Service {
         Log.d(Tag, "Tor connected successfully");
 
         Executor.execute(() -> {
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException Ignored) {}
+            try { Thread.sleep(500); } catch (InterruptedException Ignored) {}
             ControlClient = new TorControlClient();
             if (ControlClient.Connect() && ControlClient.Authenticate()) {
                 Log.d(Tag, "Control port connected");
@@ -242,15 +244,16 @@ public class TorProxyService extends Service {
             try {
                 java.net.Proxy Proxy = new java.net.Proxy(
                     java.net.Proxy.Type.SOCKS,
-                    new java.net.InetSocketAddress(TorConfig.TorHost, TorConfig.SocksPort)
-                );
+                    new java.net.InetSocketAddress(TorConfig.TorHost, TorConfig.SocksPort));
 
                 java.net.URL Url = new java.net.URL("https://api.ipify.org");
-                java.net.HttpURLConnection Connection = (java.net.HttpURLConnection) Url.openConnection(Proxy);
+                java.net.HttpURLConnection Connection =
+                    (java.net.HttpURLConnection) Url.openConnection(Proxy);
                 Connection.setConnectTimeout(10000);
                 Connection.setReadTimeout(10000);
 
-                BufferedReader IpReader = new BufferedReader(new InputStreamReader(Connection.getInputStream()));
+                BufferedReader IpReader = new BufferedReader(
+                    new InputStreamReader(Connection.getInputStream()));
                 String Ip = IpReader.readLine();
                 IpReader.close();
 
@@ -292,8 +295,7 @@ public class TorProxyService extends Service {
             NotificationChannel Channel = new NotificationChannel(
                 TorConfig.NotificationChannelId,
                 TorConfig.NotificationChannelName,
-                NotificationManager.IMPORTANCE_LOW
-            );
+                NotificationManager.IMPORTANCE_LOW);
             Channel.setDescription("TorDROID VPN connection status");
             NotificationManager Manager = getSystemService(NotificationManager.class);
             if (Manager != null) Manager.createNotificationChannel(Channel);
@@ -303,14 +305,11 @@ public class TorProxyService extends Service {
     // Builds a foreground notification with optional progress bar
     private Notification BuildNotification(String Message, int Progress) {
         Intent MainIntent = new Intent(this, MainActivity.class);
-        PendingIntent PendingIntentAction = PendingIntent.getActivity(
-            this,
-            0,
-            MainIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
+        PendingIntent PendingIntentAction = PendingIntent.getActivity(this, 0, MainIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        NotificationCompat.Builder Builder = new NotificationCompat.Builder(this, TorConfig.NotificationChannelId)
+        NotificationCompat.Builder Builder = new NotificationCompat.Builder(
+            this, TorConfig.NotificationChannelId)
             .setSmallIcon(R.drawable.ic_tor_shield)
             .setContentTitle("TorDROID")
             .setContentText(Message)
@@ -327,7 +326,8 @@ public class TorProxyService extends Service {
 
     // Posts an updated notification to the system tray
     private void UpdateNotification(String Message, int Progress) {
-        NotificationManager Manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        NotificationManager Manager = (NotificationManager)
+            getSystemService(Context.NOTIFICATION_SERVICE);
         if (Manager != null) {
             Manager.notify(TorConfig.NotificationId, BuildNotification(Message, Progress));
         }

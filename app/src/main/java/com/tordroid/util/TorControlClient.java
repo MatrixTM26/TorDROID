@@ -1,6 +1,7 @@
 package com.tordroid.util;
 
 import android.util.Log;
+
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -43,7 +44,9 @@ public class TorControlClient {
     // Authenticates with the Tor Control port using the given password
     public boolean Authenticate(String Password) {
         try {
-            String Command = Password.isEmpty() ? "AUTHENTICATE\r\n" : "AUTHENTICATE \"" + Password + "\"\r\n";
+            String Command = Password.isEmpty()
+                ? "AUTHENTICATE\r\n"
+                : "AUTHENTICATE \"" + Password + "\"\r\n";
             SendCommand(Command);
             String Response = Reader.readLine();
             Log.d(Tag, "Auth response: " + Response);
